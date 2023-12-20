@@ -1,0 +1,15 @@
+C:\src\CodingGame\FallChallenge2023\obj\Debug\net8.0\FallChallenge2023.GeneratedMSBuildEditorConfig.editorconfig
+C:\src\CodingGame\FallChallenge2023\obj\Debug\net8.0\FallChallenge2023.AssemblyInfoInputs.cache
+C:\src\CodingGame\FallChallenge2023\obj\Debug\net8.0\FallChallenge2023.AssemblyInfo.cs
+C:\src\CodingGame\FallChallenge2023\obj\Debug\net8.0\FallChallenge2023.csproj.CoreCompileInputs.cache
+C:\src\CodingGame\FallChallenge2023\obj\Debug\net8.0\FallChallenge2023.sourcelink.json
+C:\src\CodingGame\FallChallenge2023\bin\Debug\net8.0\FallChallenge2023.exe
+C:\src\CodingGame\FallChallenge2023\bin\Debug\net8.0\FallChallenge2023.deps.json
+C:\src\CodingGame\FallChallenge2023\bin\Debug\net8.0\FallChallenge2023.runtimeconfig.json
+C:\src\CodingGame\FallChallenge2023\bin\Debug\net8.0\FallChallenge2023.dll
+C:\src\CodingGame\FallChallenge2023\bin\Debug\net8.0\FallChallenge2023.pdb
+C:\src\CodingGame\FallChallenge2023\obj\Debug\net8.0\FallChallenge2023.dll
+C:\src\CodingGame\FallChallenge2023\obj\Debug\net8.0\refint\FallChallenge2023.dll
+C:\src\CodingGame\FallChallenge2023\obj\Debug\net8.0\FallChallenge2023.pdb
+C:\src\CodingGame\FallChallenge2023\obj\Debug\net8.0\FallChallenge2023.genruntimeconfig.cache
+C:\src\CodingGame\FallChallenge2023\obj\Debug\net8.0\ref\FallChallenge2023.dll
