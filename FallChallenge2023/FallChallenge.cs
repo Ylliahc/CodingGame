@@ -334,13 +334,13 @@ public class GoingToStartPointStrategy : IStrategy
         }
         else if (_drone.Swimlane.Stop == Zones.XMax)
         {
-            target = new Point(Zones.XMax, Zones.YMaxType0Zone);
+            target = new Point(Zones.XMax, Zones.YMaxType1Zone);
         }
         else
         {
             var length = (_drone.Swimlane.Stop - _drone.Swimlane.Start) / 2;
             target = new Point(x: _drone.Swimlane.Start + length,
-                                    y: Zones.YMaxType1Zone);
+                                    y: Zones.YMaxType0Zone);
         }
         Console.Error.WriteLine($"{target.X} | {_drone.Swimlane.Start} - {_drone.Swimlane.Stop}");
         if (_drone.Position.X == target.X
