@@ -69,7 +69,7 @@ class Player
                 else
                 {
                     int swimlaneStop = swimStart + swimlaneLength;
-                    if(i == myDroneCount)
+                    if (i == myDroneCount - 1)
                         swimlaneStop = Zones.XMax;
                     playerDrones.Add(droneId,
                         new Drone()
@@ -81,7 +81,7 @@ class Player
                             Swimlane = new Swimlane(swimStart, swimlaneStop)
                         }
                     );
-                    
+
                     swimStart += swimlaneLength;
                 }
             }
@@ -102,9 +102,11 @@ class Player
                 int droneId = int.Parse(inputs[0]);
                 int creatureId = int.Parse(inputs[1]);
                 if (playerDrones.ContainsKey(droneId))
+                {
                     playerDrones[droneId].ScannedNotSaved.Add(
-                        creatures[creatureId]
-                    );
+                        creatures[creatureId]);
+                    creatures[creatureId].Scanned = true;
+                }
             }
 
             int visibleCreatureCount = int.Parse(Console.ReadLine());
@@ -114,7 +116,6 @@ class Player
                 var creatureId = int.Parse(inputs[0]);
                 var creature = creatures[creatureId];
                 if (creature == null) continue;
-                creature.Scanned = true;
                 creature.Position.X = int.Parse(inputs[1]);
                 creature.Position.Y = int.Parse(inputs[2]);
                 int creatureVx = int.Parse(inputs[3]);
@@ -142,7 +143,7 @@ class Player
             foreach (var droneItem in playerDrones)
             {
                 var drone = droneItem.Value;
-
+                drone.Act();
             }
         }
     }
@@ -193,7 +194,7 @@ public class Drone
 {
     public int Id { get; set; }
     public Point Position { get; set; } = new Point();
-    public Swimlane Swimlane {get;set;} = new Swimlane(0,0);
+    public Swimlane Swimlane { get; set; } = new Swimlane(0, 0);
     public int BatteryLevel { get; set; }
     public const int MaxBatteryLevel = 30;
     public const int MaxDistance = 600;
@@ -204,6 +205,54 @@ public class Drone
     public List<Creature> ScannedNotSaved { get; set; } = new List<Creature>();
 
     public Dictionary<string, List<Creature>> RadarEntries { get; set; } = new Dictionary<string, List<Creature>>();
+
+    public void Act()
+    {
+        var strategy = ChoseStragegy();
+
+        var result = strategy.Process();
+
+        if (result.Succeeded)
+        {
+            NexStep();
+        }
+
+        Console.Error.WriteLine($"Drone {Id} {State} {result.Succeeded} {result.Action}");
+        if (result.Action == ActionType.MOVE)
+        {
+            Move(result.Target, result.UseLight);
+        }
+        else
+        {
+            Wait(result.UseLight);
+        }
+    }
+
+    private IStrategy ChoseStragegy() => State switch
+    {
+        DroneState.GoingToStartPoint => new GoingToStartPointStrategy(this),
+        DroneState.ReportingScan => new ReportScanStrategy(this),
+        DroneState.SearchingFish => new SearchingFishStrategy(this),
+        _ => new WaitingStrategy()
+    };
+
+
+    private void NexStep()
+    {
+        switch (State)
+        {
+            case DroneState.GoingToStartPoint:
+            case DroneState.ReportingScan:
+                State = DroneState.SearchingFish;
+                break;
+            case DroneState.SearchingFish:
+                State = DroneState.ReportingScan;
+                break;
+            default:
+                State = DroneState.GoingToStartPoint;
+                break;
+        }
+    }
 
     public void Move(Point target, bool useLight)
     {
@@ -234,16 +283,15 @@ public class Zones
     public const int YMinType1Zone = 5000;
     public const int YMaxType1Zone = 7500;
     public const int YMin = 0;
-    public const int YMax = 10000;
+    public const int YMax = 9999;
     public const int XMin = 0;
-    public const int XMax = 10000;
+    public const int XMax = 9999;
 }
 
 public enum DroneState
 {
     GoingToStartPoint,
     SearchingFish,
-    PositioningToGoBack,
     ReportingScan
 }
 
@@ -257,6 +305,7 @@ public class StrategyResult
     public Point? Target { get; set; }
     public ActionType Action { get; set; }
     public bool UseLight { get; set; }
+    public bool Succeeded { get; set; }
 }
 
 public enum ActionType
@@ -276,40 +325,130 @@ public class GoingToStartPointStrategy : IStrategy
     public StrategyResult Process()
     {
         Point target;
-        if(_drone.Swimlane.Start == Zones.XMin)
+        bool succeeded = false;
+        bool useLight = false;
+        var action = ActionType.MOVE;
+        if (_drone.Swimlane.Start == Zones.XMin)
         {
-            target = new Point(Zones.XMin, Zones.SurfaceLimit);
+            target = new Point(Zones.XMin, Zones.YMaxType0Zone);
         }
-        else if(_drone.Swimlane.Stop == Zones.XMax)
+        else if (_drone.Swimlane.Stop == Zones.XMax)
         {
-            target = new Point(Zones.XMax, Zones.SurfaceLimit);
+            target = new Point(Zones.XMax, Zones.YMaxType0Zone);
         }
         else
         {
-            var length = (_drone.Swimlane.Stop - _drone.Swimlane.Start)/2;
-            target = new Point(_drone.Swimlane.Start +  length, Zones.SurfaceLimit);
+            var length = (_drone.Swimlane.Stop - _drone.Swimlane.Start) / 2;
+            target = new Point(x: _drone.Swimlane.Start + length,
+                                    y: Zones.YMaxType1Zone);
+        }
+        Console.Error.WriteLine($"{target.X} | {_drone.Swimlane.Start} - {_drone.Swimlane.Stop}");
+        if (_drone.Position.X == target.X
+            && _drone.Position.Y == target.Y)
+        {
+            succeeded = true;
+            action = ActionType.WAIT;
+            useLight = true;
+            _drone.ScannedNotSaved.Clear();
         }
 
         return new StrategyResult()
         {
             Target = target,
-            Action = ActionType.MOVE,
-            UseLight = false
+            Action = action,
+            UseLight = useLight,
+            Succeeded = succeeded
         };
     }
 }
+
+public class ReportScanStrategy : IStrategy
+{
+    private Drone _drone;
+    public ReportScanStrategy(Drone drone)
+    {
+        _drone = drone;
+    }
+
+    public StrategyResult Process()
+    {
+        Point target = new Point(_drone.Position.X, Zones.SurfaceLimit);
+        bool succeeded = false;
+        var action = ActionType.MOVE;
+        Console.Error.WriteLine($"{target.X} | {_drone.Swimlane.Start} - {_drone.Swimlane.Stop}");
+        
+        if (_drone.Position.Y <= Zones.SurfaceLimit)
+        {
+            succeeded = true;
+            action = ActionType.WAIT;
+            _drone.ScannedNotSaved.Clear();
+        }
+
+        return new StrategyResult()
+        {
+            Target = target,
+            Action = action,
+            UseLight = false,
+            Succeeded = succeeded
+        };
+    }
+}
+
 
 public class SearchingFishStrategy : IStrategy
 {
     private Drone _drone;
 
+    public SearchingFishStrategy(Drone drone)
+    {
+        _drone = drone;
+    }
     public StrategyResult Process()
     {
         bool useLight = _drone.BatteryLevel > 10 ? true : false;
+        bool succeeded = false;
+        var action = ActionType.MOVE;
+
+        var direction = _drone.RadarEntries.MaxBy(creatures => creatures.Value.Where(c => c.Scanned == false).Count()).Key;
+
+        var target = direction switch
+        {
+            RadarValues.TopLeft => new Point(x: _drone.Position.X - Drone.MaxDistance,
+                                                y: _drone.Position.Y - Drone.MaxDistance),
+            RadarValues.TopRight => new Point(x: _drone.Position.X + Drone.MaxDistance,
+                                                y: _drone.Position.Y - Drone.MaxDistance),
+            RadarValues.BottomLeft => new Point(x: _drone.Position.X - Drone.MaxDistance,
+                                                    y: _drone.Position.Y + Drone.MaxDistance),
+            RadarValues.BottomRight => new Point(x: _drone.Position.X + Drone.MaxDistance,
+                                                    y: _drone.Position.Y + Drone.MaxDistance),
+            _ => new Point(_drone.Position.X, _drone.Position.Y)
+        };
+
+        if (_drone.ScannedNotSaved.Count >= 8)
+        {
+            succeeded = true;
+            action = ActionType.WAIT;
+        }
 
         return new StrategyResult()
         {
-            UseLight = useLight
+            Action = action,
+            Target = target,
+            UseLight = useLight,
+            Succeeded = succeeded
+        };
+    }
+}
+
+public class WaitingStrategy : IStrategy
+{
+    public StrategyResult Process()
+    {
+        return new StrategyResult()
+        {
+            Action = ActionType.WAIT,
+            UseLight = false,
+            Succeeded = true
         };
     }
 }
