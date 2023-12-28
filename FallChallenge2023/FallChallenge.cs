@@ -14,22 +14,20 @@ class Player
     {
         string[] inputs;
         int creatureCount = int.Parse(Console.ReadLine());
-        Dictionary<int, Creature> creatures = new Dictionary<int, Creature>();
 
         for (int i = 0; i < creatureCount; i++)
         {
             inputs = Console.ReadLine().Split(' ');
-            creatures.Add(int.Parse(inputs[0]), new Creature()
-            {
-                Id = int.Parse(inputs[0]),
-                Color = int.Parse(inputs[1]),
-                Type = int.Parse(inputs[2])
-            });
+            GameContext.Instance.Creatures
+                                    .Add(int.Parse(inputs[0])
+                                            , new Creature()
+                                            {
+                                                Id = int.Parse(inputs[0]),
+                                                Color = int.Parse(inputs[1]),
+                                                Type = int.Parse(inputs[2])
+                                            });
 
         }
-
-        Dictionary<int, Drone> playerDrones = new Dictionary<int, Drone>();
-
         // game loop
         while (true)
         {
@@ -58,9 +56,9 @@ class Player
                 var emergency = int.Parse(inputs[3]);
                 var batteryLevel = int.Parse(inputs[4]);
 
-                if (playerDrones.ContainsKey(droneId))
+                if (GameContext.Instance.PlayerDrones.ContainsKey(droneId))
                 {
-                    var drone = playerDrones[droneId];
+                    var drone = GameContext.Instance.PlayerDrones[droneId];
                     drone.Emergency = emergency;
                     drone.Position.X = droneX;
                     drone.Position.Y = droneY;
@@ -71,7 +69,7 @@ class Player
                     int swimlaneStop = swimStart + swimlaneLength;
                     if (i == myDroneCount - 1)
                         swimlaneStop = Zones.XMax;
-                    playerDrones.Add(droneId,
+                    GameContext.Instance.PlayerDrones.Add(droneId,
                         new Drone()
                         {
                             Id = droneId,
@@ -101,11 +99,12 @@ class Player
                 inputs = Console.ReadLine().Split(' ');
                 int droneId = int.Parse(inputs[0]);
                 int creatureId = int.Parse(inputs[1]);
-                if (playerDrones.ContainsKey(droneId))
+                if (GameContext.Instance.PlayerDrones.ContainsKey(droneId))
                 {
-                    playerDrones[droneId].ScannedNotSaved.Add(
-                        creatures[creatureId]);
-                    creatures[creatureId].Scanned = true;
+                    GameContext.Instance.PlayerDrones[droneId]
+                                            .ScannedNotSaved.Add(
+                                                GameContext.Instance.Creatures[creatureId]);
+                    GameContext.Instance.Creatures[creatureId].Scanned = true;
                 }
             }
 
@@ -114,12 +113,12 @@ class Player
             {
                 inputs = Console.ReadLine().Split(' ');
                 var creatureId = int.Parse(inputs[0]);
-                var creature = creatures[creatureId];
+                var creature = GameContext.Instance.Creatures[creatureId];
                 if (creature == null) continue;
                 creature.Position.X = int.Parse(inputs[1]);
                 creature.Position.Y = int.Parse(inputs[2]);
-                int creatureVx = int.Parse(inputs[3]);
-                int creatureVy = int.Parse(inputs[4]);
+                creature.XVelocity = int.Parse(inputs[3]);
+                creature.YVelocity = int.Parse(inputs[4]);
 
             }
             int radarBlipCount = int.Parse(Console.ReadLine());
@@ -129,20 +128,21 @@ class Player
                 int droneId = int.Parse(inputs[0]);
                 int creatureId = int.Parse(inputs[1]);
                 string radar = inputs[2];
-                var drone = playerDrones[droneId];
+                var drone = GameContext.Instance.PlayerDrones[droneId];
 
                 if (!drone.RadarEntries.ContainsKey(radar))
                     drone.RadarEntries.Add(radar, new List<Creature>());
 
                 drone.RadarEntries[radar].Add(
-                    creatures[creatureId]
+                    GameContext.Instance.Creatures[creatureId]
                 );
             }
 
             /*most work is done here*/
-            foreach (var droneItem in playerDrones)
+            foreach (var droneItem in GameContext.Instance.PlayerDrones)
             {
                 var drone = droneItem.Value;
+                drone.EvaluateDanger();
                 drone.Act();
             }
         }
@@ -180,6 +180,7 @@ public class Swimlane
 
 public class Creature
 {
+    public const int DangerousType = -1;
     public int Id { get; set; }
     public int Color { get; set; }
     public int Type { get; set; }
@@ -201,10 +202,42 @@ public class Drone
     public const int MinLightRange = 800;
     public const int MaxLightRange = 2000;
     public int Emergency { get; set; }
-    public DroneState State { get; set; }
+
+    private DroneState _state;
+    public DroneState State 
+    { 
+        get{ return _state; } 
+        set
+        { 
+            if(_state != DroneState.Fleeing)
+            {
+                PreviousState = _state;
+            }
+            _state = value;
+        } 
+    }
+    public DroneState PreviousState {get;set;}
     public List<Creature> ScannedNotSaved { get; set; } = new List<Creature>();
 
     public Dictionary<string, List<Creature>> RadarEntries { get; set; } = new Dictionary<string, List<Creature>>();
+
+    public bool IsInDanger()
+    {
+        return GameContext.Instance.Creatures.Any(c => c.Value.Type == Creature.DangerousType && GetDistance(c.Value.Position) < 800);
+    }
+
+    public Creature GetNearestDanger()
+    {
+        return GameContext.Instance.Creatures
+            .Where(c => c.Value.Type == Creature.DangerousType)
+            .MinBy(c => GetDistance(c.Value.Position)).Value;
+    }
+
+    public void EvaluateDanger()
+    {
+        if(IsInDanger())
+            State = DroneState.Fleeing;
+    }
 
     public void Act()
     {
@@ -233,6 +266,8 @@ public class Drone
         DroneState.GoingToStartPoint => new GoingToStartPointStrategy(this),
         DroneState.ReportingScan => new ReportScanStrategy(this),
         DroneState.SearchingFish => new SearchingFishStrategy(this),
+        DroneState.ComingDown => new ComingDownStrategy(this),
+        DroneState.Fleeing => new FleeingStrategy(this),
         _ => new WaitingStrategy()
     };
 
@@ -247,6 +282,12 @@ public class Drone
                 break;
             case DroneState.SearchingFish:
                 State = DroneState.ReportingScan;
+                break;
+            case DroneState.ComingDown:
+                State = DroneState.ReportingScan;
+                break;
+            case DroneState.Fleeing:
+                State = PreviousState;
                 break;
             default:
                 State = DroneState.GoingToStartPoint;
@@ -264,6 +305,11 @@ public class Drone
     {
         var light = useLight ? 1 : 0;
         Console.WriteLine($"WAIT {light}");
+    }
+
+    public int GetDistance(Point point)
+    {
+        return (int)Math.Ceiling(Math.Sqrt(Math.Pow(point.X - Position.X,2) + Math.Pow(point.Y - Position.Y,2)));
     }
 }
 
@@ -291,8 +337,10 @@ public class Zones
 public enum DroneState
 {
     GoingToStartPoint,
+    ComingDown,
     SearchingFish,
-    ReportingScan
+    ReportingScan,
+    Fleeing
 }
 
 public interface IStrategy
@@ -306,6 +354,7 @@ public class StrategyResult
     public ActionType Action { get; set; }
     public bool UseLight { get; set; }
     public bool Succeeded { get; set; }
+    public string Message {get;set;}
 }
 
 public enum ActionType
@@ -394,7 +443,6 @@ public class ReportScanStrategy : IStrategy
     }
 }
 
-
 public class SearchingFishStrategy : IStrategy
 {
     private Drone _drone;
@@ -453,3 +501,96 @@ public class WaitingStrategy : IStrategy
     }
 }
 
+public class ComingDownStrategy : IStrategy
+{
+    private Drone _drone;
+
+    public ComingDownStrategy(Drone drone)
+    {
+        _drone = drone;
+    }
+
+    public StrategyResult Process()
+    {
+        var target = new Point(x: _drone.Position.X,y: _drone.Position.Y);
+        bool useLight = _drone.BatteryLevel > 10 ? true : false;
+        bool succeeded = false;
+
+        if(_drone.Position.Y + Drone.MaxDistance >= Zones.YMax)
+            succeeded = true;
+
+        return new StrategyResult()
+        {
+            Action = ActionType.MOVE,
+            Target = target,
+            UseLight = useLight,
+            Succeeded = succeeded
+        };
+    }
+}
+
+public class FleeingStrategy : IStrategy
+{
+    private Drone _drone;
+    public FleeingStrategy(Drone drone)
+    {
+        _drone = drone;
+    }
+
+    public StrategyResult Process()
+    {
+        bool succeeded = false;
+        bool useLight = _drone.BatteryLevel > 10 ? true : false;
+        var action = ActionType.MOVE;
+        var creature = _drone.GetNearestDanger();
+
+        var direction =  _drone.RadarEntries.First(re => re.Value.Contains(creature)).Key;
+
+        var target = direction switch
+        {
+            RadarValues.BottomRight => new Point(x: _drone.Position.X, y: _drone.Position.Y - Drone.MaxDistance),
+            RadarValues.BottomLeft => new Point(x: _drone.Position.X, y: _drone.Position.Y - Drone.MaxDistance),
+            RadarValues.TopRight => new Point(x: _drone.Position.X - Drone.MaxDistance,
+                                                    y: _drone.Position.Y + Drone.MaxDistance),
+            RadarValues.TopLeft => new Point(x: _drone.Position.X + Drone.MaxDistance,
+                                                    y: _drone.Position.Y + Drone.MaxDistance),
+            _ => new Point(_drone.Position.X, _drone.Position.Y)
+        };
+
+        if (!_drone.IsInDanger())
+        {
+            succeeded = true;
+        }
+
+        return new StrategyResult()
+        {
+            Action = action,
+            Target = target,
+            UseLight = useLight,
+            Succeeded = succeeded
+        };
+    }
+}
+
+public sealed class GameContext
+{
+    private static Lazy<GameContext> _instance 
+                            = new Lazy<GameContext>(() => new GameContext());
+
+    public readonly Dictionary<int, Creature> Creatures;
+    public readonly Dictionary<int, Drone> PlayerDrones;
+
+    private GameContext()
+    {
+        Creatures = new Dictionary<int, Creature>();
+        PlayerDrones = new Dictionary<int, Drone>();
+    }
+
+    public static GameContext Instance
+    {
+        get
+        {
+            return _instance.Value;
+        }
+    }
+}
