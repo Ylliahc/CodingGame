@@ -114,12 +114,13 @@ class Player
                 inputs = Console.ReadLine().Split(' ');
                 var creatureId = int.Parse(inputs[0]);
                 var creature = GameContext.Instance.Creatures[creatureId];
-                if (creature == null) continue;
+                if (creature == null) 
+                    continue;
                 creature.Position.X = int.Parse(inputs[1]);
                 creature.Position.Y = int.Parse(inputs[2]);
                 creature.XVelocity = int.Parse(inputs[3]);
                 creature.YVelocity = int.Parse(inputs[4]);
-
+                Console.Error.WriteLine($"{creature.Id} {creature.Type} {creature.Position.X} {creature.Position.Y}");
             }
             int radarBlipCount = int.Parse(Console.ReadLine());
             for (int i = 0; i < radarBlipCount; i++)
@@ -221,9 +222,15 @@ public class Drone
 
     public Dictionary<string, List<Creature>> RadarEntries { get; set; } = new Dictionary<string, List<Creature>>();
 
+    public Drone()
+    {
+        _state = DroneState.ComingDown;
+        PreviousState = DroneState.GoingToStartPoint;
+    }
+
     public bool IsInDanger()
     {
-        return GameContext.Instance.Creatures.Any(c => c.Value.Type == Creature.DangerousType && GetDistance(c.Value.Position) < 800);
+        return GameContext.Instance.Creatures.Any(c => c.Value.Type == Creature.DangerousType && GetDistance(c.Value.Position) < 1000);
     }
 
     public Creature GetNearestDanger()
@@ -236,7 +243,11 @@ public class Drone
     public void EvaluateDanger()
     {
         if(IsInDanger())
+        {
             State = DroneState.Fleeing;
+            Console.Error.WriteLine("Is in danger");
+        }
+            
     }
 
     public void Act()
@@ -290,7 +301,7 @@ public class Drone
                 State = PreviousState;
                 break;
             default:
-                State = DroneState.GoingToStartPoint;
+                State = DroneState.ComingDown;
                 break;
         }
     }
@@ -512,9 +523,13 @@ public class ComingDownStrategy : IStrategy
 
     public StrategyResult Process()
     {
-        var target = new Point(x: _drone.Position.X,y: _drone.Position.Y);
+        
         bool useLight = _drone.BatteryLevel > 10 ? true : false;
         bool succeeded = false;
+        var action = ActionType.MOVE;
+        
+        var target = new Point(x: _drone.Position.X
+                                    ,y: _drone.Position.Y + (useLight ? Drone.MaxDistance : Drone.MinLightRange));
 
         if(_drone.Position.Y + Drone.MaxDistance >= Zones.YMax)
             succeeded = true;
@@ -544,18 +559,23 @@ public class FleeingStrategy : IStrategy
         var action = ActionType.MOVE;
         var creature = _drone.GetNearestDanger();
 
-        var direction =  _drone.RadarEntries.First(re => re.Value.Contains(creature)).Key;
+        //var direction =  _drone.RadarEntries.First(re => re.Value.Contains(creature)).Key;
 
-        var target = direction switch
-        {
-            RadarValues.BottomRight => new Point(x: _drone.Position.X, y: _drone.Position.Y - Drone.MaxDistance),
-            RadarValues.BottomLeft => new Point(x: _drone.Position.X, y: _drone.Position.Y - Drone.MaxDistance),
-            RadarValues.TopRight => new Point(x: _drone.Position.X - Drone.MaxDistance,
-                                                    y: _drone.Position.Y + Drone.MaxDistance),
-            RadarValues.TopLeft => new Point(x: _drone.Position.X + Drone.MaxDistance,
-                                                    y: _drone.Position.Y + Drone.MaxDistance),
-            _ => new Point(_drone.Position.X, _drone.Position.Y)
-        };
+        var target = new Point(
+            x: _drone.Position.X - creature.XVelocity - (_drone.Position.X + creature.Position.X),
+            y: _drone.Position.Y - creature.YVelocity - (_drone.Position.Y + creature.Position.Y)
+        );
+
+        // var target = direction switch
+        // {
+        //     RadarValues.BottomRight => new Point(x: _drone.Position.X, y: _drone.Position.Y - Drone.MaxDistance),
+        //     RadarValues.BottomLeft => new Point(x: _drone.Position.X, y: _drone.Position.Y - Drone.MaxDistance),
+        //     RadarValues.TopRight => new Point(x: _drone.Position.X - Drone.MaxDistance,
+        //                                             y: _drone.Position.Y - Drone.MaxDistance),
+        //     RadarValues.TopLeft => new Point(x: _drone.Position.X + Drone.MaxDistance,
+        //                                             y: _drone.Position.Y - Drone.MaxDistance),
+        //     _ => new Point(_drone.Position.X, _drone.Position.Y)
+        // };
 
         if (!_drone.IsInDanger())
         {
