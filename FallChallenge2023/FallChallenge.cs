@@ -230,7 +230,7 @@ public class Drone
 
     public bool IsInDanger()
     {
-        return GameContext.Instance.Creatures.Any(c => c.Value.Type == Creature.DangerousType && GetDistance(c.Value.Position) < 1000);
+        return GameContext.Instance.Creatures.Any(c => c.Value.Type == Creature.DangerousType && GetDistance(c.Value.Position) < 2000);
     }
 
     public Creature GetNearestDanger()
@@ -562,8 +562,8 @@ public class FleeingStrategy : IStrategy
         //var direction =  _drone.RadarEntries.First(re => re.Value.Contains(creature)).Key;
 
         var target = new Point(
-            x: _drone.Position.X - creature.XVelocity - (_drone.Position.X + creature.Position.X),
-            y: _drone.Position.Y - creature.YVelocity - (_drone.Position.Y + creature.Position.Y)
+            x: _drone.Position.X + creature.XVelocity - (_drone.Position.X + creature.Position.X),
+            y: _drone.Position.Y + creature.YVelocity - (_drone.Position.Y + creature.Position.Y)
         );
 
         // var target = direction switch
